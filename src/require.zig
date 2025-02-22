@@ -235,7 +235,7 @@ pub inline fn equalErrorf(
     comptime checkArgs(args);
 
     switch (@typeInfo(@TypeOf(value))) {
-        .ErrorSet => {
+        .error_set => {
             if (value != expected) {
                 const fail_msg = try sprintf(
                     \\Error not equal:
@@ -251,7 +251,7 @@ pub inline fn equalErrorf(
                 try failf(fail_msg, msg, args);
             }
         },
-        .ErrorUnion => {
+        .error_union => {
             if (value) |_| {
                 const fail_msg = try sprintf("Expected error, found '{any}'", .{value});
                 defer test_ally.free(fail_msg);
@@ -402,7 +402,7 @@ pub inline fn isErrorf(
 ) !void {
     comptime checkArgs(args);
 
-    if (@typeInfo(@TypeOf(value)) != .ErrorSet) {
+    if (@typeInfo(@TypeOf(value)) != .error_set) {
         const fail_msg = try sprintf("Expected error, found '{any}'", .{value});
         defer test_ally.free(fail_msg);
 
@@ -637,13 +637,13 @@ pub inline fn isNullf(
 
     const info = @typeInfo(@TypeOf(value));
 
-    if (info == .Null or (info == .Optional and value == null)) {
+    if (info == .null or (info == .optional and value == null)) {
         return;
     }
 
     const f = "Expected null value, found '{any}'";
     const fail_msg = try switch (info) {
-        .Optional => sprintf(f, .{value.?}),
+        .optional => sprintf(f, .{value.?}),
         else => sprintf(f, .{value}),
     };
     defer test_ally.free(fail_msg);
@@ -744,8 +744,8 @@ pub inline fn lenf(
     }
 
     const list_len: usize = switch (@typeInfo(List)) {
-        inline .Array, .Struct => list.len,
-        .Pointer => |info| if (info.size == .Slice) list.len else list.*.len,
+        inline .array, .@"struct" => list.len,
+        .pointer => |info| if (info.size == .slice) list.len else list.*.len,
         else => unreachable,
     };
 
@@ -838,7 +838,7 @@ pub inline fn notErrorf(
 ) !void {
     comptime checkArgs(args);
 
-    if (@typeInfo(@TypeOf(value)) == .ErrorSet) {
+    if (@typeInfo(@TypeOf(value)) == .error_set) {
         const fail_msg = try sprintf(
             "Expected non-error, found '{}'",
             .{value},
@@ -909,7 +909,7 @@ pub inline fn notNullf(
 
     const info = @typeInfo(@TypeOf(value));
 
-    if (info == .Null or (info == .Optional and value == null)) {
+    if (info == .null or (info == .optional and value == null)) {
         try failf("Received unexpected null value", msg, args);
     }
 }
@@ -923,7 +923,7 @@ fn checkArgs(args: anytype) void {
         const T = @TypeOf(args);
         const info = @typeInfo(T);
 
-        if (info != .Struct or !info.Struct.is_tuple) {
+        if (info != .@"struct" or !info.@"struct".is_tuple) {
             @compileError(fmt.comptimePrint(
                 "expected 'args' to be a tuple, found '{s}'",
                 .{@typeName(T)},
@@ -936,8 +936,8 @@ fn checkComparable(comptime T: type) void {
     comptime {
         const info = @typeInfo(T);
 
-        const is_int = info == .Int or info == .ComptimeInt;
-        const is_float = info == .Float or info == .ComptimeFloat;
+        const is_int = info == .int or info == .comptime_int;
+        const is_float = info == .float or info == .comptime_float;
         if (!is_int and !is_float) {
             const err = fmt.comptimePrint(
                 "expected integer or float, found '{s}'",
@@ -952,7 +952,7 @@ fn isEmpty(list: anytype) bool {
     assert(isList(@TypeOf(list)));
 
     return switch (@typeInfo(@TypeOf(list))) {
-        .Pointer => |info| if (info.size == .One) list.*.len == 0,
+        .pointer => |info| if (info.size == .one) list.*.len == 0,
         else => list.len == 0,
     };
 }
@@ -960,13 +960,13 @@ fn isEmpty(list: anytype) bool {
 fn isList(comptime List: type) bool {
     comptime {
         return switch (@typeInfo(List)) {
-            .Array => true,
-            .Pointer => |info| ret: {
-                const is_slice = info.size == .Slice;
-                const is_ptr_to_array = info.size == .One and @typeInfo(meta.Child(List)) == .Array;
+            .array => true,
+            .pointer => |info| ret: {
+                const is_slice = info.size == .slice;
+                const is_ptr_to_array = info.size == .one and @typeInfo(meta.Child(List)) == .array;
                 break :ret is_slice or is_ptr_to_array;
             },
-            .Struct => |info| info.is_tuple,
+            .@"struct" => |info| info.is_tuple,
             else => false,
         };
     }
@@ -976,22 +976,22 @@ fn isString(comptime T: type) bool {
     comptime {
         // Only pointer types can be strings, no optionals
         const info = @typeInfo(T);
-        if (info != .Pointer) return false;
-        const ptr = &info.Pointer;
+        if (info != .pointer) return false;
+        const ptr = &info.pointer;
 
         // Check for CV qualifiers that would prevent coerction to []const u8
         if (ptr.is_volatile or ptr.is_allowzero) return false;
 
         // If it's already a slice, simple check.
-        if (ptr.size == .Slice) {
+        if (ptr.size == .slice) {
             return ptr.child == u8;
         }
 
         // Otherwise check if it's an array type that coerces to slice.
-        if (ptr.size == .One) {
+        if (ptr.size == .one) {
             const child = @typeInfo(ptr.child);
-            if (child == .Array) {
-                const arr = &child.Array;
+            if (child == .array) {
+                const arr = &child.array;
                 return arr.child == u8;
             }
         }
@@ -1053,7 +1053,7 @@ fn formatExtra(
     try fmt.format(writer, "{{ ", .{});
 
     switch (@typeInfo(@TypeOf(list))) {
-        .Struct => for (extra, 0..) |idx, i| {
+        .@"struct" => for (extra, 0..) |idx, i| {
             if (i != extra.len - 1) {
                 inline for (list, 0..) |elemA, j| {
                     if (j == idx) {
@@ -1086,7 +1086,7 @@ fn formatList(writer: anytype, list: anytype) !void {
     try fmt.format(writer, "{{ ", .{});
 
     switch (@typeInfo(@TypeOf(list))) {
-        .Struct => inline for (list, 0..) |elem, i| {
+        .@"struct" => inline for (list, 0..) |elem, i| {
             if (i != list.len - 1) {
                 try fmt.format(writer, "{any}, ", .{elem});
             } else {
@@ -1186,19 +1186,19 @@ fn containsElement(haystack: anytype, needle: anytype) bool {
     //
     // `haystack` must be an array, tuple, slice, or string.
     const haystack_is_valid = comptime switch (haystack_info) {
-        .Pointer => |info| is_valid: {
-            if (info.size == .Slice) {
+        .pointer => |info| is_valid: {
+            if (info.size == .slice) {
                 break :is_valid true;
             }
 
-            if (info.size == .One and @typeInfo(info.child) == .Array) {
+            if (info.size == .one and @typeInfo(info.child) == .array) {
                 break :is_valid true;
             }
 
             break :is_valid haystack_is_str;
         },
-        .Array => true,
-        .Struct => |info| info.is_tuple,
+        .array => true,
+        .@"struct" => |info| info.is_tuple,
         else => false,
     };
 
@@ -1220,7 +1220,7 @@ fn containsElement(haystack: anytype, needle: anytype) bool {
     // If `haystack` is a tuple, `needle` must be one of the child types of
     // `haystack`.
     const needle_is_valid = comptime switch (haystack_info) {
-        .Pointer => |info| is_valid: {
+        .pointer => |info| is_valid: {
             if (haystack_is_str) {
                 switch (Needle) {
                     comptime_int, u8 => break :is_valid true,
@@ -1235,13 +1235,13 @@ fn containsElement(haystack: anytype, needle: anytype) bool {
             }
 
             break :is_valid switch (info.size) {
-                .Slice => Needle == meta.Child(Haystack),
-                .One => Needle == meta.Child(meta.Child(Haystack)),
+                .slice => Needle == meta.Child(Haystack),
+                .one => Needle == meta.Child(meta.Child(Haystack)),
                 else => false,
             };
         },
-        .Array => Needle == meta.Child(Haystack),
-        .Struct => is_valid: {
+        .array => Needle == meta.Child(Haystack),
+        .@"struct" => is_valid: {
             for (meta.fields(Haystack)) |f| {
                 if (Needle == f.type) {
                     break :is_valid true;
@@ -1265,7 +1265,7 @@ fn containsElement(haystack: anytype, needle: anytype) bool {
 
     // Search for `needle` in `haystack`.
     switch (haystack_info) {
-        .Pointer => |h_info| {
+        .pointer => |h_info| {
             if (haystack_is_str) {
                 if (needle_is_str) {
                     if (mem.indexOfPos(u8, haystack, 0, needle)) |_| {
@@ -1277,7 +1277,7 @@ fn containsElement(haystack: anytype, needle: anytype) bool {
 
                 return false;
             } else {
-                comptime assert(h_info.size == .Slice or h_info.size == .One);
+                comptime assert(h_info.size == .slice or h_info.size == .one);
 
                 for (haystack) |elem| {
                     if (deepEqual(needle, elem)) {
@@ -1288,12 +1288,12 @@ fn containsElement(haystack: anytype, needle: anytype) bool {
                 return false;
             }
         },
-        .Array => inline for (haystack) |elem| {
+        .array => inline for (haystack) |elem| {
             if (deepEqual(needle, elem)) {
                 return true;
             }
         },
-        .Struct => inline for (haystack) |elem| {
+        .@"struct" => inline for (haystack) |elem| {
             if (deepEqual(needle, elem)) {
                 return true;
             }
@@ -1323,10 +1323,10 @@ fn deepEqual(expected: anytype, value: anytype) bool {
 
     switch (expected_info) {
         // Invalid values.
-        .AnyFrame,
-        .Frame,
-        .NoReturn,
-        .Opaque,
+        .@"anyframe",
+        .frame,
+        .noreturn,
+        .@"opaque",
         => {
             const err = fmt.comptimePrint(
                 "type is not comparable: {s}",
@@ -1336,31 +1336,31 @@ fn deepEqual(expected: anytype, value: anytype) bool {
         },
 
         // Values that are always equal.
-        .Null,
-        .Undefined,
-        .Void,
+        .null,
+        .undefined,
+        .void,
         => return true,
 
         // Values comparable with == and !=.
-        .Bool,
-        .ComptimeFloat,
-        .ComptimeInt,
-        .Enum,
-        .EnumLiteral,
-        .ErrorSet,
-        .Float,
-        .Fn,
-        .Int,
-        .Type,
+        .bool,
+        .comptime_float,
+        .comptime_int,
+        .@"enum",
+        .enum_literal,
+        .error_set,
+        .float,
+        .@"fn",
+        .int,
+        .type,
         => if (value != expected) return false,
 
-        .Array,
-        .Vector,
+        .array,
+        .vector,
         => for (expected, value) |e, v| {
             if (!deepEqual(e, v)) return false;
         },
 
-        .ErrorUnion => {
+        .error_union => {
             if (expected) |e_payload| {
                 if (value) |v_payload| {
                     return deepEqual(e_payload, v_payload);
@@ -1375,7 +1375,7 @@ fn deepEqual(expected: anytype, value: anytype) bool {
                 }
             }
         },
-        .Optional => {
+        .optional => {
             if (expected) |e_payload| {
                 if (value) |v_payload| {
                     return deepEqual(e_payload, v_payload);
@@ -1386,15 +1386,15 @@ fn deepEqual(expected: anytype, value: anytype) bool {
 
             if (value) |_| return false;
         },
-        .Pointer => |info| switch (info.size) {
-            .Slice => {
+        .pointer => |info| switch (info.size) {
+            .slice => {
                 if (expected.len != value.len) return false;
                 for (expected, value) |e, v| {
                     if (!deepEqual(e, v)) return false;
                 }
             },
-            .One => switch (@typeInfo(info.child)) {
-                .Fn, .Opaque => if (value != expected) return false,
+            .one => switch (@typeInfo(info.child)) {
+                .@"fn", .@"opaque" => if (value != expected) return false,
                 else => if (e_is_str) {
                     comptime assert(v_is_str);
 
@@ -1406,9 +1406,9 @@ fn deepEqual(expected: anytype, value: anytype) bool {
                     return deepEqual(expected.*, value.*);
                 },
             },
-            .C, .Many => if (value != expected) return false,
+            .c, .many => if (value != expected) return false,
         },
-        .Struct => |info| inline for (info.fields) |field| {
+        .@"struct" => |info| inline for (info.fields) |field| {
             const e = @field(expected, field.name);
             const v = @field(value, field.name);
 
@@ -1416,7 +1416,7 @@ fn deepEqual(expected: anytype, value: anytype) bool {
                 return false;
             }
         },
-        .Union => |info| {
+        .@"union" => |info| {
             if (info.tag_type == null) {
                 const err = fmt.comptimePrint(
                     "type is not comparable: {s}",
@@ -1444,8 +1444,8 @@ fn deepEqual(expected: anytype, value: anytype) bool {
 fn diffLists(listA: anytype, listB: anytype) ![2][]usize {
     assert(isList(@TypeOf(listA)) and isList(@TypeOf(listB)));
 
-    const a_is_tuple = @typeInfo(@TypeOf(listA)) == .Struct;
-    const b_is_tuple = @typeInfo(@TypeOf(listB)) == .Struct;
+    const a_is_tuple = @typeInfo(@TypeOf(listA)) == .@"struct";
+    const b_is_tuple = @typeInfo(@TypeOf(listB)) == .@"struct";
 
     var visited = [_]bool{false} ** listB.len;
 
